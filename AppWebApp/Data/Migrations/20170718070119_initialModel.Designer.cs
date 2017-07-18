@@ -8,9 +8,10 @@ using AppWebApp.Data;
 namespace AppWebApp.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20170718070119_initialModel")]
+    partial class initialModel
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
             modelBuilder
                 .HasAnnotation("ProductVersion", "1.1.2")
@@ -168,7 +169,7 @@ namespace AppWebApp.Data.Migrations
 
                     b.HasIndex("VetServiceId");
 
-                    b.ToTable("tblVeterinaryVetServices");
+                    b.ToTable("VeterinaryVetService");
                 });
 
             modelBuilder.Entity("AppWebApp.Models.VetService", b =>

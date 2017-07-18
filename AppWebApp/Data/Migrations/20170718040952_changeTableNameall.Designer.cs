@@ -8,9 +8,10 @@ using AppWebApp.Data;
 namespace AppWebApp.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20170718040952_changeTableNameall")]
+    partial class changeTableNameall
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
             modelBuilder
                 .HasAnnotation("ProductVersion", "1.1.2")
@@ -31,17 +32,9 @@ namespace AppWebApp.Data.Migrations
 
                     b.Property<bool>("EmailConfirmed");
 
-                    b.Property<string>("FirstName");
-
-                    b.Property<string>("LastName");
-
                     b.Property<bool>("LockoutEnabled");
 
                     b.Property<DateTimeOffset?>("LockoutEnd");
-
-                    b.Property<DateTime>("ModDate");
-
-                    b.Property<string>("Name");
 
                     b.Property<string>("NormalizedEmail")
                         .HasMaxLength(256);
@@ -59,8 +52,6 @@ namespace AppWebApp.Data.Migrations
 
                     b.Property<bool>("TwoFactorEnabled");
 
-                    b.Property<DateTime>("UpDate");
-
                     b.Property<string>("UserName")
                         .HasMaxLength(256);
 
@@ -74,125 +65,6 @@ namespace AppWebApp.Data.Migrations
                         .HasName("UserNameIndex");
 
                     b.ToTable("tblUser");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.Pet", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<DateTime>("Birthdate");
-
-                    b.Property<string>("ImageProfileId");
-
-                    b.Property<bool>("IsActive");
-
-                    b.Property<DateTime>("ModDate");
-
-                    b.Property<string>("Name");
-
-                    b.Property<int>("PetTypeId");
-
-                    b.Property<string>("Race");
-
-                    b.Property<DateTime>("UpDate");
-
-                    b.Property<string>("UserId");
-
-                    b.Property<int>("Wight");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PetTypeId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("tblPets");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.PetType", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<bool>("IsActive");
-
-                    b.Property<DateTime>("ModDate");
-
-                    b.Property<string>("Name");
-
-                    b.Property<DateTime>("UpDate");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("tblPetTypes");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.Veterinary", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<string>("Address");
-
-                    b.Property<string>("Description");
-
-                    b.Property<string>("ImageProfileId");
-
-                    b.Property<bool>("IsActive");
-
-                    b.Property<float>("Latitud");
-
-                    b.Property<float>("Longitud");
-
-                    b.Property<DateTime>("ModDate");
-
-                    b.Property<string>("Name");
-
-                    b.Property<string>("PhoneNumber");
-
-                    b.Property<DateTime>("UpDate");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("tblVeterinaries");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.VeterinaryVetService", b =>
-                {
-                    b.Property<int>("VeterinaryId");
-
-                    b.Property<int>("VetServiceId");
-
-                    b.HasKey("VeterinaryId", "VetServiceId");
-
-                    b.HasIndex("VetServiceId");
-
-                    b.ToTable("tblVeterinaryVetServices");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.VetService", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd();
-
-                    b.Property<string>("Description");
-
-                    b.Property<bool>("IsActive");
-
-                    b.Property<DateTime>("ModDate");
-
-                    b.Property<string>("Name");
-
-                    b.Property<float>("Price");
-
-                    b.Property<bool>("ShowPrice");
-
-                    b.Property<DateTime>("UpDate");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("tblVetServices");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityRole", b =>
@@ -300,31 +172,6 @@ namespace AppWebApp.Data.Migrations
                     b.HasKey("UserId", "LoginProvider", "Name");
 
                     b.ToTable("tblUserToken");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.Pet", b =>
-                {
-                    b.HasOne("AppWebApp.Models.PetType", "PetType")
-                        .WithMany("Pets")
-                        .HasForeignKey("PetTypeId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("AppWebApp.Models.ApplicationUser", "User")
-                        .WithMany("Pets")
-                        .HasForeignKey("UserId");
-                });
-
-            modelBuilder.Entity("AppWebApp.Models.VeterinaryVetService", b =>
-                {
-                    b.HasOne("AppWebApp.Models.VetService", "VetService")
-                        .WithMany("VeterinaryVetServices")
-                        .HasForeignKey("VetServiceId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.HasOne("AppWebApp.Models.Veterinary", "Veterinary")
-                        .WithMany("VeterinaryVetServices")
-                        .HasForeignKey("VeterinaryId")
-                        .OnDelete(DeleteBehavior.Cascade);
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityRoleClaim<string>", b =>

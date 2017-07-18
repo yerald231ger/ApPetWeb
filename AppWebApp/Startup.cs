@@ -12,11 +12,15 @@ using Microsoft.Extensions.Logging;
 using AppWebApp.Data;
 using AppWebApp.Models;
 using AppWebApp.Services;
+using System.Text;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.Options;
 
 namespace AppWebApp
 {
-    public class Startup
+    public partial class Startup
     {
+
         public Startup(IHostingEnvironment env)
         {
             var builder = new ConfigurationBuilder()
@@ -74,8 +78,9 @@ namespace AppWebApp
             app.UseStaticFiles();
 
             app.UseIdentity();
-
             // Add external authentication middleware below. To configure them please see https://go.microsoft.com/fwlink/?LinkID=532715
+
+            ConfigureAuth(app);
 
             app.UseMvc(routes =>
             {

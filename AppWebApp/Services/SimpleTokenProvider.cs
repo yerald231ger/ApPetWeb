@@ -16,6 +16,10 @@ using System.Text.Encodings.Web;
 using AppWebApp.Data;
 using Microsoft.AspNetCore.Identity;
 using AppWebApp.Models;
+using Newtonsoft.Json.Schema;
+using NJsonSchema;
+using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json.Linq;
 
 namespace AppWebApp.Services
 {
@@ -125,6 +129,10 @@ namespace AppWebApp.Services
         /// <remarks>The default nonce is a random GUID.</remarks>
         public Func<Task<string>> NonceGenerator { get; set; }
             = new Func<Task<string>>(() => Task.FromResult(Guid.NewGuid().ToString()));
+
+        public string SignInPath { get; internal set; }
+
+        public IConfigurationRoot Schemas { get; set; }
     }
 
     /// <summary>
@@ -154,7 +162,7 @@ namespace AppWebApp.Services
             var d = _userManager.FindByEmailAsync("yerald231ger@gmail.com").Result;
             _options = options.Value;
             ThrowIfInvalidOptions(_options);
-
+            
             _serializerSettings = new JsonSerializerSettings
             {
                 Formatting = Formatting.Indented
@@ -165,8 +173,10 @@ namespace AppWebApp.Services
         {
             // If the request path doesn't match, skip
             if (!context.Request.Path.Equals(_options.Path, StringComparison.Ordinal))
-            {
                 return _next(context);
+            else if (context.Request.Path.Equals(_options.SignInPath, StringComparison.Ordinal))
+            {
+              
             }
 
             // Request must be POST with Content-Type: application/x-www-form-urlencoded
@@ -178,6 +188,7 @@ namespace AppWebApp.Services
             }
 
             _logger.LogInformation("Handling request: " + context.Request.Path);
+            
 
             return GenerateToken(context);
         }
@@ -232,6 +243,15 @@ namespace AppWebApp.Services
             await context.Response.WriteAsync(JsonConvert.SerializeObject(response, new JsonSerializerSettings { Formatting = Formatting.Indented }));
         }
 
+        private async Task SignIn(HttpContext context)
+        {
+                //var user = new ApplicationUser { UserName = model.Email, Email = model.Email };
+                //var result = await _userManager.CreateAsync(user, model.Password);
+                ////if (result.Succeeded)
+                ////r
+
+        }
+
         private static void ThrowIfInvalidOptions(TokenProviderOptions options)
         {
             if (string.IsNullOrEmpty(options.Path))
@@ -268,6 +288,16 @@ namespace AppWebApp.Services
             {
                 throw new ArgumentNullException(nameof(TokenProviderOptions.NonceGenerator));
             }
+
+            if (options.SignInPath == null)
+            {
+                throw new ArgumentNullException(nameof(TokenProviderOptions.SignInPath));
+            }
+
+            if (options.Schemas == null)
+            {
+                throw new ArgumentNullException(nameof(TokenProviderOptions.Schemas));
+            }
         }
 
         //public static long ToUnixEpochDate(DateTime date) => new DateTimeOffset(date).ToUniversalTime().ToUnixTimeSeconds();
@@ -295,4 +325,27 @@ namespace AppWebApp.Services
             return app.UseMiddleware<TokenProviderMiddleware>(Options.Create(options));
         }
     }
+
+    //public class MetricsJSchema
+    //{
+    //    private static readonly Lazy<MetricsJSchema> lazy =
+    //        new Lazy<MetricsJSchema>(() => new MetricsJSchema());
+
+    //    public static MetricsJSchema Instance { get { return lazy.Value; } }
+    //    public string SJSchema { get; private set; }
+    //    public JsonSchema4 JsonSchema4 { get; private set; }
+
+    //    private MetricsJSchema()
+    //    {
+    //        SJSchema = File.ReadAllText(Configuration);
+    //        JsonSchema4 = JsonSchema4.FromJsonAsync(SJSchema).Result;
+    //    }
+
+    //    public void UpdateSchema(JObject jObject)
+    //    {
+    //        SJSchema = jObject.ToString();
+    //        File.WriteAllText(ConfigurationManager.AppSettings["json-schema"], SJSchema);
+    //        JsonSchema4 = JsonSchema4.FromJsonAsync(SJSchema).Result;
+    //    }
+    //}
 }

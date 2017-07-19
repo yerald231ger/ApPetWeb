@@ -25,7 +25,9 @@ namespace AppWebApp
                 Audience = "ExampleAudience",
                 Issuer = "ExampleIssuer",
                 SigningCredentials = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256),
-                IdentityResolver = GetIdentity
+                IdentityResolver = GetIdentity,
+                SignInPath = "/api/register",
+                Schemas = Configuration
             });
 
             var tokenValidationParameters = new TokenValidationParameters

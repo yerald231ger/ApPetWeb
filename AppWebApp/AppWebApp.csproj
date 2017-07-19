@@ -35,5 +35,8 @@
   <ItemGroup>
     <None Include="Startup.Auth.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <Folder Include="Services\Repositories\" />
+  </ItemGroup>
 
 </Project>

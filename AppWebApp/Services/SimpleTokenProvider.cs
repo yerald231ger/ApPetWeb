@@ -11,6 +11,11 @@ using Newtonsoft.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Logging;
 using System.Globalization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Text.Encodings.Web;
+using AppWebApp.Data;
+using Microsoft.AspNetCore.Identity;
+using AppWebApp.Models;
 
 namespace AppWebApp.Services
 {
@@ -134,15 +139,19 @@ namespace AppWebApp.Services
         private readonly TokenProviderOptions _options;
         private readonly ILogger _logger;
         private readonly JsonSerializerSettings _serializerSettings;
+        private readonly UserManager<ApplicationUser> _userManager;
 
         public TokenProviderMiddleware(
              RequestDelegate next,
              IOptions<TokenProviderOptions> options,
-             ILoggerFactory loggerFactory)
+             UserManager<ApplicationUser> userManager,
+             ILoggerFactory loggerFactory
+             )
         {
             _next = next;
             _logger = loggerFactory.CreateLogger<TokenProviderMiddleware>();
-
+            _userManager = userManager;
+            var d = _userManager.FindByEmailAsync("yerald231ger@gmail.com").Result;
             _options = options.Value;
             ThrowIfInvalidOptions(_options);
 
@@ -202,14 +211,14 @@ namespace AppWebApp.Services
             };
             identity.AddClaims(claims);
 
-             // Create the JWT and write it to a string
-             var jwt = new JwtSecurityToken(
-                issuer: _options.Issuer,
-                audience: _options.Audience,
-                claims: identity.Claims,
-                notBefore: now,
-                expires: now.Add(_options.Expiration),
-                signingCredentials: _options.SigningCredentials);
+            // Create the JWT and write it to a string
+            var jwt = new JwtSecurityToken(
+               issuer: _options.Issuer,
+               audience: _options.Audience,
+               claims: identity.Claims,
+               notBefore: now,
+               expires: now.Add(_options.Expiration),
+               signingCredentials: _options.SigningCredentials);
             var encodedJwt = new JwtSecurityTokenHandler().WriteToken(jwt);
 
             var response = new

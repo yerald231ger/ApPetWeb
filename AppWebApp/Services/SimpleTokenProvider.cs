@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Text;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
@@ -10,6 +11,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Logging;
+using System.Linq;
 using System.Globalization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using System.Text.Encodings.Web;
@@ -20,6 +22,7 @@ using Newtonsoft.Json.Schema;
 using NJsonSchema;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
+using System.IO;
 
 namespace AppWebApp.Services
 {
@@ -121,7 +124,7 @@ namespace AppWebApp.Services
         /// <summary>
         /// Resolves a user identity given a username and password.
         /// </summary>
-        public Func<string, string, Task<ClaimsIdentity>> IdentityResolver { get; set; }
+        public Func<string, string, UserManager<ApplicationUser>, Task<ClaimsIdentity>> IdentityResolver { get; set; }
 
         /// <summary>
         /// Generates a random value (nonce) for each generated token.
@@ -162,7 +165,6 @@ namespace AppWebApp.Services
             var d = _userManager.FindByEmailAsync("yerald231ger@gmail.com").Result;
             _options = options.Value;
             ThrowIfInvalidOptions(_options);
-            
             _serializerSettings = new JsonSerializerSettings
             {
                 Formatting = Formatting.Indented
@@ -181,7 +183,7 @@ namespace AppWebApp.Services
 
             // Request must be POST with Content-Type: application/x-www-form-urlencoded
             if (!context.Request.Method.Equals("POST")
-               || !context.Request.HasFormContentType)
+               || context.Request.ContentType != "application/json")
             {
                 context.Response.StatusCode = 400;
                 return context.Response.WriteAsync("Bad request.");
@@ -195,10 +197,36 @@ namespace AppWebApp.Services
 
         private async Task GenerateToken(HttpContext context)
         {
-            var username = context.Request.Form["username"];
-            var password = context.Request.Form["password"];
+            var logInSchema = _options.Schemas.GetSection("LogIn").Value;
+            var schema = JsonSchema4.FromJsonAsync(logInSchema);
+            JObject json = null;
 
-            var identity = await _options.IdentityResolver(username, password);
+            using (var streamReader = new StreamReader(context.Request.Body))
+            {
+                json = JObject.Parse(streamReader.ReadToEnd());
+            }
+
+            var result = (await schema).Validate(json);
+            
+            if(result.Count != 0)
+            {
+                context.Response.StatusCode = 400;
+
+                var erros = result.Select(r => new {
+                    Error = r.Kind.ToString(),
+                    r.Property,
+                    r.LineNumber,
+                    r.LinePosition
+                });
+
+                await context.Response.WriteAsync(JsonConvert.SerializeObject(erros));
+                return;
+            }
+
+            var identity = await _options.IdentityResolver(
+                json.SelectToken("username").Value<string>(), 
+                json.SelectToken("password").Value<string>(),
+                _userManager);
             if (identity == null)
             {
                 context.Response.StatusCode = 400;
@@ -216,7 +244,7 @@ namespace AppWebApp.Services
             // You can add other claims here, if you want:
             var claims = new Claim[]
             {
-                new Claim(JwtRegisteredClaimNames.Sub, username),
+                new Claim(JwtRegisteredClaimNames.Sub, ""),
                 new Claim(JwtRegisteredClaimNames.Jti, await _options.NonceGenerator()),
                 new Claim(JwtRegisteredClaimNames.Iat, unixDateTime.ToString(), ClaimValueTypes.Integer64)
             };

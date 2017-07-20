@@ -1,5 +1,7 @@
-﻿using AppWebApp.Services;
+﻿using AppWebApp.Models;
+using AppWebApp.Services;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
@@ -15,7 +17,7 @@ namespace AppWebApp
     {
         private static readonly string secretKey = "yerald231ger@gmail.com!@Ger231";
 
-		public void ConfigureAuth(IApplicationBuilder app)
+        public void ConfigureAuth(IApplicationBuilder app)
         {
             var signingKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(secretKey));
 
@@ -50,7 +52,7 @@ namespace AppWebApp
                 // If you want to allow a certain amount of clock drift, set that here:
                 ClockSkew = TimeSpan.Zero
             };
-			
+
             app.UseJwtBearerAuthentication(new JwtBearerOptions
             {
                 AutomaticAuthenticate = true,
@@ -70,31 +72,20 @@ namespace AppWebApp
             });
         }
 
-        private Task<ClaimsIdentity> GetIdentity(string username, string password)
+        private async Task<ClaimsIdentity> GetIdentity(string username, string password, UserManager<ApplicationUser> userManager)
         {
             // Don't do this in production, obviously!
-            if (username == "TEST" && password == "TEST123")
-            {
-                var claims = new Claim[]
-                   {
-                    new Claim(ClaimTypes.Role, "Admin"),
-                    new Claim(ClaimTypes.Name, "test1"),
-                    new Claim(ClaimTypes.NameIdentifier, "test11"),
-                   };
-                var claimIdentity = new GenericIdentity(username, "Token");
-				var claimsIentities = new ClaimsIdentity(claimIdentity, claims);
-                return Task.FromResult(claimsIentities);
-            }
-			else if (username == "TEST1" && password == "TEST123")
-            {
-                return Task.FromResult(new ClaimsIdentity(new GenericIdentity(username, "Token"), new Claim[]
-                {
-                    new Claim(ClaimTypes.Role, "User")
-                }));
-            }
 
-            // Credentials are invalid, or account doesn't exist
-            return Task.FromResult<ClaimsIdentity>(null);
+            var user = await userManager.FindByNameAsync(username);
+            if (user == null)
+                return await Task.FromResult<ClaimsIdentity>(null);
+
+            var ok = await userManager.CheckPasswordAsync(user, password);
+            if (!ok)
+                return await Task.FromResult<ClaimsIdentity>(null);
+
+            var claims = await userManager.GetClaimsAsync(user);
+            return await Task.FromResult(new ClaimsIdentity(new GenericIdentity(user.UserName, "Token"), claims));
         }
     }
 }

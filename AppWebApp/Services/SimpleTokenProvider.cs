@@ -23,6 +23,8 @@ using NJsonSchema;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 using System.IO;
+using System.Collections.Generic;
+using System.Security.Principal;
 
 namespace AppWebApp.Services
 {
@@ -174,80 +176,121 @@ namespace AppWebApp.Services
         public Task Invoke(HttpContext context)
         {
             // If the request path doesn't match, skip
-            if (!context.Request.Path.Equals(_options.Path, StringComparison.Ordinal))
+            if (context.Request.Path.Equals(_options.Path, StringComparison.Ordinal)
+                || context.Request.Path.Equals(_options.SignInPath, StringComparison.Ordinal))
+            {
+
+                // Request must be POST with Content-Type: application/x-www-form-urlencoded
+                if (!context.Request.Method.Equals("POST")
+                   || context.Request.ContentType != "application/json")
+                    return WriteResponseJson(context, new IdentityError
+                    {
+                        Error = "BadRequest",
+                        Description = "The 'ContentType' or Method is not allowed"
+                    }, 400);
+                
+
+                _logger.LogInformation("Handling request: " + context.Request.Path);
+
+                if (context.Request.Path.Equals(_options.Path, StringComparison.Ordinal))
+                    return LogIn(context);
+                else
+                    return SignIn(context);
+            }
+            else
                 return _next(context);
-            else if (context.Request.Path.Equals(_options.SignInPath, StringComparison.Ordinal))
-            {
-              
-            }
-
-            // Request must be POST with Content-Type: application/x-www-form-urlencoded
-            if (!context.Request.Method.Equals("POST")
-               || context.Request.ContentType != "application/json")
-            {
-                context.Response.StatusCode = 400;
-                return context.Response.WriteAsync("Bad request.");
-            }
-
-            _logger.LogInformation("Handling request: " + context.Request.Path);
-            
-
-            return GenerateToken(context);
         }
 
-        private async Task GenerateToken(HttpContext context)
+        private async Task LogIn(HttpContext context)
         {
-            var logInSchema = _options.Schemas.GetSection("LogIn").Value;
-            var schema = JsonSchema4.FromJsonAsync(logInSchema);
-            JObject json = null;
+            var schemaTask = GetJsonSchema("LogIn");
+            var jsonTask = GetJson(context);
 
-            using (var streamReader = new StreamReader(context.Request.Body))
+            var errors = ValidJson(context, await schemaTask, await jsonTask);
+
+            if (errors != null)
             {
-                json = JObject.Parse(streamReader.ReadToEnd());
-            }
-
-            var result = (await schema).Validate(json);
-            
-            if(result.Count != 0)
-            {
-                context.Response.StatusCode = 400;
-
-                var erros = result.Select(r => new {
-                    Error = r.Kind.ToString(),
-                    r.Property,
-                    r.LineNumber,
-                    r.LinePosition
-                });
-
-                await context.Response.WriteAsync(JsonConvert.SerializeObject(erros));
+                await WriteResponseJson(context, errors, 400);
                 return;
             }
 
             var identity = await _options.IdentityResolver(
-                json.SelectToken("username").Value<string>(), 
-                json.SelectToken("password").Value<string>(),
-                _userManager);
-            if (identity == null)
+               jsonTask.Result.SelectToken("username").Value<string>(),
+               jsonTask.Result.SelectToken("password").Value<string>(),
+               _userManager);
+
+            var token = GenerateToken(identity, jsonTask.Result.SelectToken("username").Value<string>());
+
+            // Serialize and return the response
+            await WriteResponseJson(context, token, 200);
+        }
+
+        private async Task SignIn(HttpContext context)
+        {
+            var schemaTask = GetJsonSchema("SignIn");
+            var jsonTask = GetJson(context);
+
+            var errors = ValidJson(context, await schemaTask, await jsonTask);
+
+            if (errors != null)
             {
-                context.Response.StatusCode = 400;
-                await context.Response.WriteAsync("Invalid username or password.");
+                await WriteResponseJson(context, errors, 400);
                 return;
             }
 
-            var now = DateTime.UtcNow;
-            var dateTime = new DateTime(now.Ticks, DateTimeKind.Local);
-            var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-            var unixDateTime = (dateTime.ToUniversalTime() - epoch).TotalSeconds;
+            var identityResult = await _userManager.CreateAsync(
+                new ApplicationUser
+                {
+                    UserName = jsonTask.Result.SelectToken("username").Value<string>()
+                }, 
+                jsonTask.Result.SelectToken("password").Value<string>());
 
+            if (identityResult.Succeeded)
+            {
+                var user = await _userManager.FindByEmailAsync(jsonTask.Result.SelectToken("username").Value<string>());
+                var claims = await _userManager.GetClaimsAsync(user);
+
+                var token = GenerateToken(new ClaimsIdentity(new GenericIdentity(user.UserName, "Token"), claims), user.UserName);
+
+                // Serialize and return the response
+                await WriteResponseJson(context, token, 200);
+            }
+            else
+            {
+                var identityErrors = identityResult.Errors.Select(ir => new IdentityError
+                {
+                    Description = ir.Description,
+                    Error = ir.Code
+                }).ToList();
+                await WriteResponseJson(context, identityErrors, 404);
+            }
+        }
+        
+        private Task WriteResponseJson(HttpContext context, object json, int code)
+        {
+            return WriteResponse(context, JsonConvert.SerializeObject(json, new JsonSerializerSettings { Formatting = Formatting.Indented }), "application/json", code);
+        }
+
+        private Task WriteResponse(HttpContext context, string buffer, string contentType, int code)
+        {
+            context.Response.StatusCode = code;
+            context.Response.ContentType = contentType;
+            return context.Response.WriteAsync(buffer);
+        }
+
+        private Token GenerateToken(ClaimsIdentity identity, string sub)
+        {
+            var now = DateTime.UtcNow;
 
             // Specifically add the jti (random nonce), iat (issued timestamp), and sub (subject/user) claims.
             // You can add other claims here, if you want:
             var claims = new Claim[]
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, ""),
-                new Claim(JwtRegisteredClaimNames.Jti, await _options.NonceGenerator()),
-                new Claim(JwtRegisteredClaimNames.Iat, unixDateTime.ToString(), ClaimValueTypes.Integer64)
-            };
+               {
+                    new Claim(JwtRegisteredClaimNames.Sub, sub),
+                    new Claim(JwtRegisteredClaimNames.Jti, _options.NonceGenerator().Result),
+                    new Claim(JwtRegisteredClaimNames.Iat, ToUnixEpochDate(now).ToString(), ClaimValueTypes.Integer64)
+               };
+
             identity.AddClaims(claims);
 
             // Create the JWT and write it to a string
@@ -260,24 +303,67 @@ namespace AppWebApp.Services
                signingCredentials: _options.SigningCredentials);
             var encodedJwt = new JwtSecurityTokenHandler().WriteToken(jwt);
 
-            var response = new
+            return new Token
             {
                 access_token = encodedJwt,
                 expires_in = (int)_options.Expiration.TotalSeconds
             };
-
-            // Serialize and return the response
-            context.Response.ContentType = "application/json";
-            await context.Response.WriteAsync(JsonConvert.SerializeObject(response, new JsonSerializerSettings { Formatting = Formatting.Indented }));
         }
 
-        private async Task SignIn(HttpContext context)
+        private List<IdentityError> ValidJson(HttpContext context, JsonSchema4 schema, JObject json)
         {
-                //var user = new ApplicationUser { UserName = model.Email, Email = model.Email };
-                //var result = await _userManager.CreateAsync(user, model.Password);
-                ////if (result.Succeeded)
-                ////r
+            var resultSchema = schema.Validate(json);
 
+            if (resultSchema.Count != 0)
+            {
+
+                return resultSchema.Select(r => new IdentityError
+                {
+                    Description = r.Kind.ToString(),
+                    Error = r.Property,
+                    LineNumber = r.LineNumber,
+                    LinePosition = r.LinePosition
+                }).ToList();
+            }
+            return null;
+        }
+
+        private Task<JsonSchema4> GetJsonSchema(string configurationKey)
+        {
+            var signInSchema = _options.Schemas.GetSection(configurationKey).Value;
+            return JsonSchema4.FromJsonAsync(signInSchema);
+        }
+
+        private Task<JObject> GetJson(HttpContext context)
+        {
+            return Task.Factory.StartNew(() =>
+            {
+                using (var streamReader = new StreamReader(context.Request.Body))
+                {
+                    return JObject.Parse(streamReader.ReadToEnd());
+                }
+            });
+        }
+
+        private class IdentityError
+        {
+            public string Description { get; set; }
+            public string Error { get; set; }
+            public int LineNumber { get; set; }
+            public int LinePosition { get; set; }
+        }
+
+        private class Token
+        {
+            public string access_token { get; set; }
+            public int expires_in { get; set; }
+        }
+
+        private static double ToUnixEpochDate(DateTime now)
+        {
+            var dateTime = new DateTime(now.Ticks, DateTimeKind.Local);
+            var epoch = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            return (dateTime.ToUniversalTime() - epoch).TotalSeconds;
         }
 
         private static void ThrowIfInvalidOptions(TokenProviderOptions options)
@@ -327,8 +413,6 @@ namespace AppWebApp.Services
                 throw new ArgumentNullException(nameof(TokenProviderOptions.Schemas));
             }
         }
-
-        //public static long ToUnixEpochDate(DateTime date) => new DateTimeOffset(date).ToUniversalTime().ToUnixTimeSeconds();
     }
 
     public static class TokenProviderAppBuilderExtensions
